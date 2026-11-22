@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(firebase login:*)",
+      "Read(//d/JongTak-Lim/$APPDATA/firebase/**)",
+      "Read(//d/JongTak-Lim/$USERPROFILE/.config/firebase/**)",
+      "Read(//d/JongTak-Lim/$APPDATA/**)",
+      "Read(//d/JongTak-Lim/$USERPROFILE/.config/**)",
+      "Bash(cmd.exe /c \"dir %APPDATA%\\\\firebase\")",
+      "Bash(cmd.exe /c \"dir \\\\\"%APPDATA%\\\\\\\\firebase\\\\\\\\\" 2>&1)",
+      "Bash(cmd.exe /c \"start cmd.exe /k \\\\\"firebase login && echo 로그인 완료! 이 창을 닫아도 됩니다.\\\\\"\")",
+      "Bash(command -v firebase)",
+      "Bash(cmd.exe /c \"start cmd.exe /k \\\\\"C:\\\\\\\\Users\\\\\\\\User\\\\\\\\AppData\\\\\\\\Roaming\\\\\\\\npm\\\\\\\\firebase.cmd login\\\\\"\")",
+      "Bash(node:*)",
+      "Bash(winpty firebase:*)",
+      "Bash(winpty:*)",
+      "Bash(gcloud --version)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase apphosting:backends:list)",
+      "Bash(firebase apphosting:rollouts:create jongtak-lim --git-branch main)",
+      "Bash(firebase apphosting:rollouts:create jongtak-lim)"
+    ]
+  }
+}

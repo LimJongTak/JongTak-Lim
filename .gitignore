@@ -1,0 +1,14 @@
+node_modules/
+dist/
+server/data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.DS_Store
+*.tsbuildinfo
+client/dist-preview/
+preview/
+# Firebase 서비스 계정 키 (절대 커밋 금지)
+*service-account*.json
+*serviceAccountKey*.json

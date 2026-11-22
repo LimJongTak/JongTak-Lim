@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 모든 Firestore 접근은 서버(Firebase Admin SDK)를 통해서만 허용.
+    // 클라이언트에서 Firestore SDK를 직접 사용하지 않음.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

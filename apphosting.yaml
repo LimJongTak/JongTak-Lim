@@ -1,0 +1,25 @@
+runConfig:
+  runtime: nodejs22
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 10
+
+env:
+  - variable: NODE_ENV
+    value: production
+  - variable: FIREBASE_PROJECT_ID
+    value: jongtak-lim
+  - variable: GITHUB_USER
+    value: LimJongTak
+  - variable: JWT_SECRET
+    secret: jwt-secret
+  - variable: ADMIN_PASSWORD
+    secret: admin-password
+  - variable: HASH_SALT
+    secret: hash-salt
+  # 선택: GitHub API rate limit 완화 (필요 시 등록)
+  # firebase apphosting:secrets:set github-token
+  # - variable: GITHUB_TOKEN
+  #   secret: github-token
