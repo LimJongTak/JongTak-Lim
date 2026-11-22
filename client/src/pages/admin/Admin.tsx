@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { api, errorText, formatDate, type GuestbookEntry, type Message, type Repo } from '../../lib/api';
 import { useApi, useTheme } from '../../lib/hooks';
 import ResourceEditor, { type Field } from './ResourceEditor';
+import ConfirmButton from '../../components/ConfirmButton';
 import './admin.css';
 
 /* ───────────── 필드 정의 ───────────── */
@@ -209,7 +210,6 @@ function Messages() {
     setData(data.map(x => x.id === m.id ? { ...x, is_read: is_read ? 1 : 0 } : x));
   };
   const del = async (m: Message) => {
-    if (!confirm('삭제할까요?')) return;
     await api(`/admin/messages/${m.id}`, { method: 'DELETE' });
     setData(data.filter(x => x.id !== m.id));
   };
@@ -228,7 +228,7 @@ function Messages() {
               <div className="adm-actions">
                 <a className="btn btn-primary btn-sm" href={`mailto:${m.email}?subject=${encodeURIComponent('Re: ' + (m.subject || '문의 주셔서 감사합니다'))}`}>메일로 답장</a>
                 <button className="btn btn-ghost btn-sm" onClick={() => mark(m, false)}>안 읽음으로</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => del(m)}>삭제</button>
+                <ConfirmButton onConfirm={() => del(m)} />
               </div>
             </div>
           )}
@@ -244,25 +244,35 @@ function GuestbookAdmin() {
   const { data, reload } = useApi<GuestbookEntry[]>('/admin/guestbook');
   if (!data) return <div className="loader" />;
   if (!data.length) return <p className="empty">방명록이 없습니다.</p>;
-  const patch = async (id: number, body: object) => { await api(`/admin/guestbook/${id}`, { method: 'PATCH', json: body }); reload(); };
-  const del = async (id: number) => { if (confirm('삭제할까요?')) { await api(`/admin/guestbook/${id}`, { method: 'DELETE' }); reload(); } };
+  return <ul className="adm-list">{data.map(g => <GuestbookAdminItem key={g.id} g={g} onChange={reload} />)}</ul>;
+}
+
+function GuestbookAdminItem({ g, onChange }: { g: GuestbookEntry; onChange: () => void }) {
+  const [replying, setReplying] = useState(false);
+  const [reply, setReply] = useState(g.reply);
+  const patch = async (body: object) => { await api(`/admin/guestbook/${g.id}`, { method: 'PATCH', json: body }); onChange(); };
+  const del = async () => { await api(`/admin/guestbook/${g.id}`, { method: 'DELETE' }); onChange(); };
   return (
-    <ul className="adm-list">
-      {data.map(g => (
-        <li key={g.id} className={`adm-item ${g.is_hidden ? 'hidden' : ''}`}>
-          <div className="adm-item-body">
-            <p><b>{g.name}</b> <span className="adm-muted">{formatDate(g.created_at)} {g.is_hidden ? '· 숨김' : ''}</span></p>
-            <p style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{g.message}</p>
-            {g.reply && <p className="gb-reply"><b>답글</b>{g.reply}</p>}
-            <div className="adm-actions">
-              <button className="btn btn-ghost btn-sm" onClick={() => { const r = prompt('답글 (비우면 삭제)', g.reply); if (r !== null) patch(g.id, { reply: r }); }}>답글</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => patch(g.id, { is_hidden: !g.is_hidden })}>{g.is_hidden ? '다시 보이기' : '숨기기'}</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => del(g.id)}>삭제</button>
-            </div>
+    <li className={`adm-item ${g.is_hidden ? 'hidden' : ''}`}>
+      <div className="adm-item-body">
+        <p><b>{g.name}</b> <span className="adm-muted">{formatDate(g.created_at)} {g.is_hidden ? '· 숨김' : ''}</span></p>
+        <p style={{ whiteSpace: 'pre-wrap' }}>{g.message}</p>
+        {g.reply && !replying && <p className="gb-reply"><b>답글</b>{g.reply}</p>}
+        {replying && (
+          <form style={{ display: 'grid', gap: 8 }} onSubmit={async e => { e.preventDefault(); await patch({ reply }); setReplying(false); }}>
+            <textarea id={`reply-${g.id}`} className="textarea" style={{ minHeight: 80 }} maxLength={500} value={reply} onChange={e => setReply(e.target.value)} placeholder="비워서 저장하면 답글이 지워집니다" />
+            <div className="adm-actions"><button className="btn btn-brand btn-sm">답글 저장</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setReplying(false); setReply(g.reply); }}>취소</button></div>
+          </form>
+        )}
+        {!replying && (
+          <div className="adm-actions">
+            <button className="btn btn-ghost btn-sm" onClick={() => setReplying(true)}>{g.reply ? '답글 수정' : '답글'}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => patch({ is_hidden: !g.is_hidden })}>{g.is_hidden ? '다시 보이기' : '숨기기'}</button>
+            <ConfirmButton onConfirm={del} />
           </div>
-        </li>
-      ))}
-    </ul>
+        )}
+      </div>
+    </li>
   );
 }
 

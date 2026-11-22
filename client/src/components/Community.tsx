@@ -28,12 +28,6 @@ export function Guestbook() {
     } finally { setBusy(false); }
   };
 
-  const remove = async (id: number) => {
-    const password = window.prompt('작성 시 입력한 비밀번호를 입력하세요.');
-    if (!password) return;
-    try { await api(`/guestbook/${id}`, { method: 'DELETE', json: { password } }); reload(); }
-    catch (err) { window.alert(errorText(err)); }
-  };
 
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
@@ -65,17 +59,7 @@ export function Guestbook() {
           <div>
             <ul className="gb-list">
               {data?.items.length === 0 && <li className="empty">첫 번째 방명록을 남겨주세요 ✍️</li>}
-              {data?.items.map(g => (
-                <li key={g.id} className="gb-item">
-                  <header>
-                    <span className="avatar" style={{ background: colorOf(g.name) }}>{[...g.name][0]}</span>
-                    <div><b>{g.name}</b><br /><time dateTime={g.created_at}>{formatDate(g.created_at)}</time></div>
-                    <button className="del" onClick={() => remove(g.id)}>삭제</button>
-                  </header>
-                  <p>{g.message}</p>
-                  {g.reply && <div className="gb-reply"><b>임종탁</b>{g.reply}</div>}
-                </li>
-              ))}
+              {data?.items.map(g => <GuestbookItem key={g.id} g={g} onDeleted={reload} />)}
             </ul>
             {pages > 1 && (
               <div className="pager">
@@ -140,5 +124,34 @@ export function Contact({ profile }: { profile: Profile }) {
         </form>
       </div>
     </section>
+  );
+}
+
+function GuestbookItem({ g, onDeleted }: { g: GuestbookEntry; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault(); setErr('');
+    try { await api(`/guestbook/${g.id}`, { method: 'DELETE', json: { password: pw } }); onDeleted(); }
+    catch (e2) { setErr(errorText(e2)); }
+  };
+  return (
+    <li className="gb-item">
+      <header>
+        <span className="avatar" style={{ background: colorOf(g.name) }}>{[...g.name][0]}</span>
+        <div><b>{g.name}</b><br /><time dateTime={g.created_at}>{formatDate(g.created_at)}</time></div>
+        <button className="del" onClick={() => { setDeleting(d => !d); setErr(''); setPw(''); }}>{deleting ? '취소' : '삭제'}</button>
+      </header>
+      {deleting && (
+        <form className="gb-del" onSubmit={submit}>
+          <input className="input" type="password" placeholder="작성할 때 정한 비밀번호" aria-label="비밀번호" value={pw} onChange={e => setPw(e.target.value)} required autoFocus />
+          <button className="btn btn-danger btn-sm">삭제</button>
+          {err && <span className="gb-del-err" role="alert">{err}</span>}
+        </form>
+      )}
+      <p>{g.message}</p>
+      {g.reply && <div className="gb-reply"><b>임종탁</b>{g.reply}</div>}
+    </li>
   );
 }

@@ -53,6 +53,12 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, headers, ...rest } = init;
+  if (import.meta.env.VITE_DEMO) {
+    // 미리보기 빌드: 서버 없이 브라우저 안에서 동작하는 가짜 API
+    const { demoApi, DemoError } = await import('./demo');
+    try { return await demoApi(path, rest.method ?? 'GET', (json ?? {}) as Record<string, unknown>) as T; }
+    catch (e) { if (e instanceof DemoError) throw new ApiError(e.status, e.message); throw e; }
+  }
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
     ...rest,

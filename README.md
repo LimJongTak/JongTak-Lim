@@ -92,3 +92,13 @@ client/src
   styles/         global.css (디자인 토큰, 다크 모드)
 client/public/images  포트폴리오 PDF에서 추출한 이미지
 ```
+
+## 미리보기 빌드 (서버 없이 열어보기)
+
+```bash
+npm run build:preview   # → preview/index.html + preview/images
+```
+
+API 호출을 브라우저 안의 가짜 백엔드(`client/src/lib/demo.ts`)로 바꾼 단일 HTML을 만듭니다.
+방명록·문의·좋아요·관리자 수정은 그 브라우저의 localStorage에만 저장됩니다. 관리자 계정은 `admin` / `admin1234`입니다.
+프로덕션 빌드(`npm run build`)에는 데모 코드가 포함되지 않습니다.

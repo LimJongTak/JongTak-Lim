@@ -7,3 +7,5 @@ server/data/
 .env
 .DS_Store
 *.tsbuildinfo
+client/dist-preview/
+preview/

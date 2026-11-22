@@ -83,6 +83,7 @@ export default function Layout() {
       </nav>
 
       <main><Outlet /></main>
+      {import.meta.env.VITE_DEMO && <DemoBar />}
 
       <Footer />
       <button className={`icon-btn to-top ${progress > 0.15 ? 'show' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="맨 위로">
@@ -107,5 +108,23 @@ function Footer() {
         </span>
       </div>
     </footer>
+  );
+}
+
+/** 미리보기 빌드에서만 보이는 안내 막대 */
+function DemoBar() {
+  const [open, setOpen] = useState(true);
+  if (!open) return null;
+  const reset = async () => {
+    const { resetDemo } = await import('../lib/demo');
+    resetDemo(); window.location.reload();
+  };
+  return (
+    <div className="demo-bar" role="note">
+      <span><b>미리보기</b> 방명록·문의·좋아요는 이 브라우저에만 저장돼요.</span>
+      <Link to="/admin">관리자 화면 (admin / admin1234)</Link>
+      <button onClick={reset}>데이터 초기화</button>
+      <button onClick={() => setOpen(false)} aria-label="안내 닫기">✕</button>
+    </div>
   );
 }

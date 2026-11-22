@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { api, errorText } from '../../lib/api';
 import { useApi } from '../../lib/hooks';
+import ConfirmButton from '../../components/ConfirmButton';
 
 export type Field = {
   key: string; label: string;
@@ -53,7 +54,6 @@ export default function ResourceEditor({ resource, fields, columns, defaults = {
   };
 
   const remove = async (row: Row) => {
-    if (!confirm('정말 삭제할까요? 되돌릴 수 없습니다.')) return;
     await api(`/admin/content/${resource}/${row.id}`, { method: 'DELETE' });
     reload();
   };
@@ -73,7 +73,7 @@ export default function ResourceEditor({ resource, fields, columns, defaults = {
                 {columns.map(c => <td key={c}>{Array.isArray(row[c]) ? (row[c] as unknown[]).length + '개' : typeof row[c] === 'number' && (c === 'featured' || c === 'published') ? (row[c] ? '✔' : '') : String(row[c] ?? '')}</td>)}
                 <td className="adm-actions">
                   <button className="btn btn-ghost btn-sm" onClick={() => open(row)}>수정</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => remove(row)}>삭제</button>
+                  <ConfirmButton onConfirm={() => remove(row)} />
                 </td>
               </tr>
             ))}

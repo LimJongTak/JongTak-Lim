@@ -1,6 +1,6 @@
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import ProjectDetail from './pages/ProjectDetail';
@@ -21,9 +21,12 @@ function NotFound() {
   );
 }
 
+// 미리보기(아티팩트) 빌드는 주소창 경로를 쓸 수 없어 메모리 라우터를 사용
+const Router = import.meta.env.VITE_DEMO ? MemoryRouter : BrowserRouter;
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/admin/*" element={<Suspense fallback={<div className="page-loading"><div className="loader" /></div>}><Admin /></Suspense>} />
         <Route element={<Layout />}>
@@ -32,6 +35,6 @@ createRoot(document.getElementById('root')!).render(
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </Router>
   </StrictMode>
 );

@@ -22,7 +22,7 @@
   --radius-sm: 12px;
   --maxw: 1160px;
   --nav-h: 68px;
-  --font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font: 'Pretendard Variable', Pretendard, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
 }
@@ -426,6 +426,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .gb-item header time { font-size: 12px; color: var(--muted); }
 .gb-item header .del { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 6px; }
 .gb-item header .del:hover { color: var(--danger); background: var(--surface-2); }
+.gb-del { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.gb-del .input { flex: 1 1 180px; padding: 8px 12px; }
+.gb-del-err { flex-basis: 100%; font-size: 13px; color: var(--danger); }
 .gb-item > p { margin-top: 10px; white-space: pre-wrap; color: var(--text-2); overflow-wrap: anywhere; }
 .gb-reply { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--brand-soft); font-size: 14px; }
 .gb-reply b { color: var(--brand-strong); margin-right: 6px; }
@@ -503,3 +506,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--dot), var(--brand), var(--line)); z-index: 60; transform-origin: left; }
 .to-top { position: fixed; right: 20px; bottom: 20px; z-index: 40; opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; transform: translateY(10px); box-shadow: var(--shadow); }
 .to-top.show { opacity: 1; pointer-events: auto; transform: none; }
+
+.demo-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 70;
+  display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; justify-content: center;
+  width: max-content; max-width: calc(100% - 32px); padding: 10px 14px 10px 18px; border-radius: 16px;
+  background: var(--text); color: var(--bg); font-size: 13px; box-shadow: var(--shadow-lg);
+}
+.demo-bar b { color: var(--line); margin-right: 6px; }
+.demo-bar a { text-decoration: underline; text-underline-offset: 3px; }
+.demo-bar button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 13px; opacity: .75; padding: 2px 4px; }
+.demo-bar button:hover { opacity: 1; }
