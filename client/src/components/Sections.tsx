@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Award, Experience, Profile, Project, Repo, Rich, Skill } from '../lib/api';
 import { CATEGORY_LABEL } from '../lib/api';
@@ -7,8 +7,49 @@ import * as I from './Icons';
 
 /* ───────────── Hero ───────────── */
 
-function RichText({ parts }: { parts: Rich[] }) {
-  return <>{parts.map((p, i) => typeof p === 'string' ? <span key={i}>{p}</span> : <span key={i} className={`c-${p.color}`}>{p.text}</span>)}</>;
+/* 헤드라인 글자 애니메이션 타이밍 (ms) */
+const CH_START = 250;
+const CH_STEP = 28;
+
+/**
+ * 헤드라인을 글자 단위로 쪼개 순서대로 등장시킨다.
+ * 한국어 줄바꿈(keep-all)이 깨지지 않도록 단어 단위로 묶고, 강조어(점/선)에는 마커 애니메이션을 붙인다.
+ */
+function AnimatedHeadline({ headline }: { headline: Profile['headline'] }) {
+  let i = 0;
+  const split = (text: string, prefix: string): ReactNode[] =>
+    text.split(/(\s+)/).filter(Boolean).map((w, wi) => /^\s+$/.test(w) ? ' ' : (
+      <span className="w" key={`${prefix}-${wi}`}>
+        {Array.from(w).map((c, ci) => <span className="ch" key={ci} style={{ '--i': i++ } as CSSProperties}>{c}</span>)}
+      </span>
+    ));
+  const rich = (parts: Rich[], row: number) => parts.map((p, k) => {
+    if (typeof p === 'string') return <span key={k}>{split(p, `${row}-${k}`)}</span>;
+    const nodes = split(p.text, `${row}-${k}`);
+    return (
+      <span key={k} className={`mark mark-${p.color} c-${p.color}`} style={{ '--after': `${CH_START + i * CH_STEP + 200}ms` } as CSSProperties}>
+        {nodes}
+      </span>
+    );
+  });
+  const line1 = rich(headline.line1, 1);
+  const line2 = rich(headline.line2, 2);
+  const line3 = <span className="quote">{split(`“${headline.line3}”`, '3')}</span>;
+  const plain = (parts: Rich[]) => parts.map(p => typeof p === 'string' ? p : p.text).join('');
+  return (
+    <h1 aria-label={`${plain(headline.line1)} ${plain(headline.line2)} “${headline.line3}”`} style={{ '--total': i } as CSSProperties}>
+      <span className="row" aria-hidden>{line1}</span>
+      <span className="row" aria-hidden>{line2}</span>
+      <span className="row" aria-hidden>{line3}</span>
+    </h1>
+  );
+}
+
+/** 헤드라인 글자 수로 아래 점·선 애니메이션 시작 시점을 계산 */
+function headlineDuration(h: Profile['headline']) {
+  const count = (parts: Rich[]) => parts.reduce((n, p) => n + Array.from((typeof p === 'string' ? p : p.text).replace(/\s/g, '')).length, 0);
+  const total = count(h.line1) + count(h.line2) + Array.from(h.line3.replace(/\s/g, '')).length + 2;
+  return CH_START + total * CH_STEP + 500;
 }
 
 function Typer({ words }: { words: string[] }) {
@@ -41,20 +82,17 @@ function Stat({ value, suffix, label }: Profile['stats'][number]) {
 
 export function Hero({ profile }: { profile: Profile }) {
   return (
-    <section className="hero" id="top">
+    <section className="hero" id="top" style={{ '--line-start': `${headlineDuration(profile.headline)}ms` } as CSSProperties}>
       <div className="hero-bg"><div className="hero-grid" /><div className="blob b1" /><div className="blob b2" /><div className="blob b3" /></div>
       <div className="container hero-inner">
         <div className="hero-top">
           <div><strong>{new Date().getFullYear()}</strong>Portfolio</div>
           <span className="status-pill">함께할 팀을 찾고 있어요</span>
         </div>
-        <h1>
-          <span className="row"><span><RichText parts={profile.headline.line1} /></span></span>
-          <span className="row"><span><RichText parts={profile.headline.line2} /></span></span>
-          <span className="row"><span className="quote">“{profile.headline.line3}”</span></span>
-        </h1>
+        <AnimatedHeadline headline={profile.headline} />
         <div className="hero-line" aria-hidden>
-          <span className="track" /><span className="pt start" /><span className="pt end" />
+          <span className="rail"><span className="track" /><span className="pulse" /><span className="head" /></span>
+          <span className="pt start" /><span className="pt end" />
         </div>
         <div className="hero-bottom">
           <div>
@@ -252,6 +290,36 @@ export function Projects({ projects }: { projects: Project[] }) {
 /* ───────────── Experience timeline ───────────── */
 
 export function ExperienceSection({ items }: { items: Experience[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 스크롤에 맞춰 세로선을 채우고, 선이 닿은 항목을 활성화
+  useEffect(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+    const lis = Array.from(wrap.querySelectorAll<HTMLElement>('.tl-item'));
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const rect = wrap.getBoundingClientRect();
+      const anchor = window.innerHeight * 0.62; // 화면 62% 지점까지 선이 따라온다
+      const fill = reduce ? rect.height : Math.max(0, Math.min(rect.height, anchor - rect.top));
+      wrap.style.setProperty('--fill', `${fill}px`);
+      wrap.classList.toggle('is-started', fill > 0);
+      wrap.classList.toggle('is-done', fill >= rect.height - 2);
+      for (const li of lis) li.classList.toggle('active', li.offsetTop + 34 <= fill);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [items]);
+
   return (
     <section className="section section-alt" id="experience">
       <div className="container">
@@ -260,22 +328,27 @@ export function ExperienceSection({ items }: { items: Experience[] }) {
           <h2>함께 그려온 선들</h2>
           <p>학생회, 동아리, 봉사와 멘토링. 사람과 조직 사이에서 문제를 해결해 온 기록입니다.</p>
         </div>
-        <ol className="timeline">
-          {items.map(x => (
-            <li key={x.id} className="tl-item reveal">
-              <div className="tl-card">
-                <div className="tl-date">
-                  {x.start_date} – {x.end_date || '현재'}
-                  <div><span className="chip chip-brand">{CATEGORY_LABEL[x.category] ?? x.category}</span></div>
+        <div className="timeline" ref={ref}>
+          <span className="tl-track" aria-hidden />
+          <span className="tl-fill" aria-hidden />
+          <span className="tl-head" aria-hidden />
+          <ol className="tl-list">
+            {items.map(x => (
+              <li key={x.id} className="tl-item">
+                <div className="tl-card">
+                  <div className="tl-date">
+                    {x.start_date} – {x.end_date || '현재'}
+                    <div><span className="chip chip-brand">{CATEGORY_LABEL[x.category] ?? x.category}</span></div>
+                  </div>
+                  <div>
+                    <h3>{x.org}<small>{x.title}</small></h3>
+                    <ul>{x.items.map((it, j) => <li key={j} style={{ '--j': j } as CSSProperties}>{it}</li>)}</ul>
+                  </div>
                 </div>
-                <div>
-                  <h3>{x.org}<small>{x.title}</small></h3>
-                  <ul>{x.items.map((it, i) => <li key={i}>{it}</li>)}</ul>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   );
