@@ -24,5 +24,5 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN ?? '',
   /** 문의가 들어오면 POST로 알려줄 웹훅(슬랙/디스코드 등). 선택. */
   notifyWebhook: process.env.NOTIFY_WEBHOOK_URL ?? '',
-  clientDist: path.resolve(process.env.CLIENT_DIST ?? '../client/dist'),
+  clientDist: path.resolve(process.env.CLIENT_DIST ?? (isProd ? './public' : '../client/dist')),
 };
