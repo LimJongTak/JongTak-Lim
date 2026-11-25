@@ -11,14 +11,16 @@
 |---|---|
 | Frontend | React 19, TypeScript, Vite, React Router |
 | Backend | Node.js 22+, Express 5, TypeScript, Zod(입력 검증) |
-| Database | SQLite (Node 내장 `node:sqlite`, 네이티브 모듈 설치 불필요) |
+| Database | Firebase Firestore (firebase-admin, 서버에서만 접근) |
+| 배포 | Firebase App Hosting (`apphosting.yaml`) |
 | 인증·보안 | JWT(httpOnly 쿠키), bcrypt, helmet(CSP), express-rate-limit, 허니팟 스팸 방지 |
 
 ## 기능
 
 **방문자 화면**
 - Hero (점 → 선 애니메이션), About, Skills, The Start of Line, Projects, Experience 타임라인, Growing Together, Awards, Future Line, GitHub, 방명록, Contact
-- 프로젝트 상세 페이지 `/projects/:slug` (Problem / Process / Insight, 좋아요, 조회수, 이전·다음)
+- 프로젝트 상세 페이지 `/projects/:slug` (Problem / Process / Insight, 화면 갤러리, 좋아요, 조회수, 이전·다음)
+- 활동 블로그 `/blog`, `/blog/:slug` (분류 필터, 사진 갤러리·라이트박스) + 메인의 Activity Log 섹션
 - 라이트·다크 모드, 반응형, 스크롤 진행 바, 등장 애니메이션 (`prefers-reduced-motion` 지원)
 
 **백엔드 처리**
@@ -32,24 +34,40 @@
 
 **관리자 `/admin`**
 - 대시보드: 방문자·페이지뷰·일별 그래프·많이 본 페이지·유입 경로·프로젝트 반응
-- 프로젝트 / 경력 / 수상 / 기술 CRUD, 프로필(메인 문구 등) 편집
+- 프로젝트 / 블로그 / 경력 / 수상 / 기술 CRUD, 프로필(메인 문구 등) 편집
 - 문의함(읽음 처리, 메일 답장), 방명록 관리, GitHub 레포 숨김, 비밀번호 변경
 
-## DB 스키마
+## DB (Firestore 컬렉션)
 
-| 테이블 | 용도 |
+| 컬렉션 | 용도 |
 |---|---|
-| `settings` | 프로필 JSON (메인 문구, 소개, 철학 섹션 등) |
+| `settings` | `profile`(메인 문구·소개 등 JSON), `migrations`(적용한 콘텐츠 마이그레이션 id) |
 | `admins` | 관리자 계정 (bcrypt 해시) |
-| `projects` | 프로젝트 (JSON 컬럼: problem, process, highlights, tech) |
+| `projects` | 프로젝트 (problem, process, highlights, tech, images 배열) |
+| `posts` | 활동 블로그 글 (본문 마크다운, images 배열) |
 | `experiences` / `awards` / `skills` | 경력·활동 / 수상·자격·수료 / 기술 스택 |
-| `guestbook` | 방명록 (비밀번호 해시, 숨김, 답글) |
-| `messages` | 문의 |
-| `page_views` | 방문 기록 (경로, 방문자 해시, 유입 경로) |
-| `project_likes` | 좋아요 (프로젝트 + 방문자 해시 PK) |
+| `guestbook` / `messages` | 방명록 / 문의 |
+| `page_views` / `project_likes` | 방문 기록 / 좋아요 |
 | `github_repos` | GitHub 레포 캐시 |
 
-스키마는 `server/src/db.ts`의 `MIGRATIONS` 배열로 관리합니다 (`PRAGMA user_version`).
+- 서버가 시작될 때 비어 있는 컬렉션만 `server/src/seed-data.ts`, `seed-posts.ts` 내용으로 채웁니다.
+- 이미 운영 중인 DB에 새 콘텐츠를 넣어야 할 때는 `server/src/seed.ts`의 `CONTENT_MIGRATIONS`에 항목을 추가합니다. 한 번 적용되면 `settings/migrations`에 기록되어 다시 실행되지 않습니다.
+
+## 블로그 글 쓰기
+
+`/admin` → **블로그** 탭에서 쓰고 고칩니다. 본문 문법:
+
+| 쓰는 법 | 결과 |
+|---|---|
+| 빈 줄 | 문단 구분 |
+| `## 소제목` | 소제목 |
+| `> 문장` | 인용 상자 |
+| `- 항목` | 목록 |
+| `**굵게**` | 강조 |
+| `![캡션](/images/activities/폴더/파일.webp)` | 본문 사진 한 장 |
+| `[[gallery]]` | "사진" 칸에 넣은 사진 묶음이 이 위치에 표시 |
+
+사진 파일은 `client/public/images/activities/<글 이름>/`에 넣고, 관리자 "사진" 칸에 한 줄씩 `경로 | 캡션`으로 적습니다.
 
 ## 실행
 
@@ -66,31 +84,35 @@ npm run dev        # API :4000 + Vite :5173 (프록시 연결)
 - 첫 실행 때 DB를 만들고 `server/src/seed-data.ts` 내용(PDF·이력서·GitHub 기반)을 넣습니다.
 - 콘텐츠를 seed 내용으로 초기화: `npm run seed` (방명록·문의·통계는 유지)
 
-### 배포 (단일 서버)
+### 배포 (Firebase App Hosting)
+
+App Hosting은 `server/`만 보고, **미리 빌드해서 커밋한** `server/dist`(서버)와 `server/public`(프론트)을 실행합니다.
+코드나 이미지를 바꿨다면 반드시 다시 빌드해서 함께 커밋하세요.
 
 ```bash
-npm run build
-NODE_ENV=production JWT_SECRET=... ADMIN_PASSWORD=... npm start
+npm run build:deploy   # client 빌드 → server/public 복사, server/dist 컴파일
+git add -A && git commit -m "..." && git push origin main
 ```
 
-프로덕션에서는 Express가 빌드된 클라이언트(`client/dist`)까지 함께 서빙합니다.
-`JWT_SECRET`, `ADMIN_PASSWORD`가 없으면 서버가 시작되지 않습니다.
-SQLite 파일(`DB_PATH`)이 남아 있어야 하므로, 디스크가 유지되는 환경(VPS, Railway/Fly.io 볼륨 등)에 배포하세요.
+`main`에 푸시하면 App Hosting이 새로 배포합니다. 비밀 값(`JWT_SECRET`, `ADMIN_PASSWORD`, `HASH_SALT`)은 `apphosting.yaml`의 secret으로 관리합니다.
 
 ## 폴더 구조
 
 ```
 server/src
   index.ts        앱 진입점, 정적 파일 서빙
-  db.ts           SQLite 연결, 마이그레이션
-  seed-data.ts    초기 콘텐츠
+  db.ts           Firestore 연결
+  seed.ts         초기 콘텐츠 삽입, 콘텐츠 마이그레이션
+  seed-data.ts    초기 콘텐츠 (프로필·프로젝트·경력 등)
+  seed-posts.ts   활동 블로그 초기 글
   github.ts       GitHub 동기화
   routes/         public · community(방명록/문의) · admin(인증/CRUD/통계)
 client/src
   components/     Layout, Sections, Community, Icons
-  pages/          Home, ProjectDetail, admin/
+  pages/          Home, ProjectDetail, Blog, BlogPost, admin/
   styles/         global.css (디자인 토큰, 다크 모드)
-client/public/images  포트폴리오 PDF에서 추출한 이미지
+client/public/images             포트폴리오 PDF에서 추출한 이미지
+client/public/images/activities  활동·프로젝트 사진 (MyWay, RE:POINT 기획서에서 추출)
 ```
 
 ## 미리보기 빌드 (서버 없이 열어보기)

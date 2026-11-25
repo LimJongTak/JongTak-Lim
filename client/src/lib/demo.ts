@@ -4,19 +4,23 @@
  * 실제 서버의 라우트와 응답 모양을 그대로 흉내 내며, 데이터는 이 브라우저의 localStorage에만 저장된다.
  */
 import * as seed from '../../../server/src/seed-data';
+import { posts as seedPosts } from '../../../server/src/seed-posts';
 
 type Row = Record<string, unknown> & { id: number };
 type State = {
   profile: Record<string, unknown>;
   projects: Row[]; experiences: Row[]; awards: Row[]; skills: Row[];
-  repos: Row[]; guestbook: Row[]; messages: Row[];
+  repos: Row[]; guestbook: Row[]; messages: Row[]; posts: Row[];
   views: { path: string; day: string; visitor: string }[];
   likes: number[]; seq: number;
 };
 
-const KEY = 'jt-portfolio-demo-v1';
+const KEY = 'jt-portfolio-demo-v2';
 const VISITOR = 'demo-visitor';
+// 아티팩트에서는 절대경로(/images/..)가 claude.ai 루트를 가리키므로 상대경로로 바꾼다
 const rel = (p: unknown) => typeof p === 'string' ? p.replace(/^\//, '') : p;
+const relImages = (list?: { src: string; caption: string }[]) => (list ?? []).map(x => ({ ...x, src: rel(x.src) as string }));
+const relBody = (body: string) => body.replace(/\]\(\/images\//g, '](images/');
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -25,7 +29,11 @@ function initial(): State {
   const profile = { ...seed.profile, photo: rel(seed.profile.photo) as string };
   const projects = seed.projects.map((p, i) => ({
     id: id++, period: '', team: '', problem: [], process: [], insight: '', highlights: [], github_url: '', demo_url: '',
-    ...p, cover: rel(p.cover ?? ''), featured: !!p.featured, published: 1, sort_order: i, views: 0, likes: 0,
+    ...p, cover: rel(p.cover ?? ''), images: relImages(p.images), featured: !!p.featured, published: 1, sort_order: i, views: 0, likes: 0,
+  }));
+  const posts = seedPosts.map((p, i) => ({
+    id: id++, place: '', ...p, cover: rel(p.cover ?? '') as string, images: relImages(p.images), body: relBody(p.body),
+    featured: !!p.featured, published: true, sort_order: i, views: 0,
   }));
   const experiences = seed.experiences.map((e, i) => ({ id: id++, ...e, sort_order: i }));
   const awards = seed.awards.map((a, i) => ({ id: id++, ...a, sort_order: i }));
@@ -34,7 +42,7 @@ function initial(): State {
   const guestbook = [
     { id: id++, name: '미리보기', message: '데모 방명록입니다. 직접 남겨보세요! (이 브라우저에만 저장돼요)', reply: '방문해 주셔서 감사합니다 :)', is_hidden: 0, password: '0000', created_at: now() },
   ];
-  return { profile, projects, experiences, awards, skills, repos, guestbook, messages: [], views: [], likes: [], seq: id };
+  return { profile, projects, experiences, awards, skills, repos, guestbook, posts, messages: [], views: [], likes: [], seq: id };
 }
 
 let state: State = (() => {
@@ -55,7 +63,7 @@ const publishedProjects = () => state.projects.filter(p => p.published)
   .sort((a, b) => (Number(b.featured) - Number(a.featured)) || byOrder(a, b));
 const strip = ({ password: _p, ...g }: Row) => g;
 
-const RESOURCES = ['projects', 'experiences', 'awards', 'skills'] as const;
+const RESOURCES = ['projects', 'experiences', 'awards', 'skills', 'posts'] as const;
 type Res = typeof RESOURCES[number];
 
 export async function demoApi(path: string, method: string, body: Record<string, unknown> = {}): Promise<unknown> {
@@ -86,12 +94,22 @@ export async function demoApi(path: string, method: string, body: Record<string,
     save();
     return { liked, likes: pr.likes };
   }
+  if (method === 'GET' && p === '/posts') {
+    return [...state.posts].filter(x => x.published !== false).sort(byOrder).map(({ body: _b, images, ...x }) => ({ ...x, photo_count: Array.isArray(images) ? images.length : 0 }));
+  }
+  if (method === 'GET' && r(/^\/posts\/([\w-]+)$/)) {
+    const list = [...state.posts].filter(x => x.published !== false).sort(byOrder);
+    const i = list.findIndex(x => x.slug === m![1]);
+    if (i < 0) fail(404, '글을 찾을 수 없습니다.');
+    const pick = (x?: Row) => x ? { slug: x.slug, title: x.title } : null;
+    return { ...list[i], prev: pick(list[i - 1]), next: pick(list[i + 1]) };
+  }
   if (method === 'POST' && p === '/track') {
     const path2 = String(body.path ?? '/');
     if (!state.views.some(v => v.path === path2 && v.day === today())) {
       state.views.push({ path: path2, day: today(), visitor: VISITOR });
-      const mm = path2.match(/^\/projects\/([\w-]+)$/);
-      const pr = mm && state.projects.find(x => x.slug === mm[1]);
+      const mm = path2.match(/^\/(projects|blog)\/([\w-]+)$/);
+      const pr = mm && (mm[1] === 'blog' ? state.posts : state.projects).find(x => x.slug === mm[2]);
       if (pr) pr.views = Number(pr.views) + 1;
       save();
     }

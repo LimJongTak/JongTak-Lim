@@ -84,6 +84,7 @@ const RESOURCES: Record<string, { collection: string; schema: ZodObject<ZodRawSh
       github_url: z.union([z.url(), z.literal('')]).default(''),
       demo_url: z.union([z.url(), z.literal('')]).default(''),
       cover: z.string().max(500).default(''),
+      images: z.array(z.object({ src: z.string().max(500), caption: z.string().max(200).default('') })).max(40).default([]),
       accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#8b5cf6'),
       featured: z.coerce.boolean().default(false),
       published: z.coerce.boolean().default(true),
@@ -110,6 +111,25 @@ const RESOURCES: Record<string, { collection: string; schema: ZodObject<ZodRawSh
       title: z.string().min(1).max(150),
       issuer: z.string().max(100).default(''),
       description: z.string().max(500).default(''),
+      sort_order: z.coerce.number().int().default(0),
+    }),
+  },
+  posts: {
+    collection: 'posts',
+    schema: z.object({
+      slug: z.string().regex(/^[a-z0-9-]+$/, '영문 소문자, 숫자, - 만 사용').max(80),
+      title: z.string().min(1).max(120),
+      excerpt: z.string().max(400).default(''),
+      category: z.enum(['leadership', 'festival', 'community', 'club', 'volunteer', 'startup', 'etc']).default('etc'),
+      period: z.string().max(40).default(''),
+      place: z.string().max(80).default(''),
+      role: z.string().max(80).default(''),
+      tags: strArr.default([]),
+      cover: z.string().max(500).default(''),
+      images: z.array(z.object({ src: z.string().max(500), caption: z.string().max(200).default('') })).max(60).default([]),
+      body: z.string().max(30000).default(''),
+      featured: z.coerce.boolean().default(false),
+      published: z.coerce.boolean().default(true),
       sort_order: z.coerce.number().int().default(0),
     }),
   },
@@ -141,13 +161,14 @@ adminRouter.post('/content/:resource', ah(async (req, res) => {
   const vals = parse(r.schema, req.body) as Record<string, unknown>;
   const now = new Date().toISOString();
 
-  // slug 중복 체크 (projects)
-  if (name === 'projects' && vals.slug) {
-    const dup = await fdb.collection('projects').where('slug', '==', vals.slug).limit(1).get();
+  // slug 중복 체크 (projects, posts)
+  if ((name === 'projects' || name === 'posts') && vals.slug) {
+    const dup = await fdb.collection(name).where('slug', '==', vals.slug).limit(1).get();
     if (!dup.empty) throw new HttpError(409, '이미 존재하는 슬러그입니다.');
   }
 
-  const extra = name === 'projects' ? { views: 0, likes: 0, updated_at: now } : {};
+  const extra = name === 'projects' ? { views: 0, likes: 0, updated_at: now }
+    : name === 'posts' ? { views: 0, updated_at: now } : {};
   const ref = await fdb.collection(r.collection).add({ ...vals, ...extra, created_at: now });
   const doc = await ref.get();
   res.status(201).json({ id: ref.id, ...doc.data() });
@@ -166,7 +187,7 @@ adminRouter.put('/content/:resource/:id', ah(async (req, res) => {
   const vals = Object.fromEntries(Object.entries(parsed).filter(([k]) => sent.has(k)));
   if (Object.keys(vals).length === 0) throw new HttpError(400, '변경할 값이 없습니다.');
 
-  const extra = name === 'projects' ? { updated_at: new Date().toISOString() } : {};
+  const extra = name === 'projects' || name === 'posts' ? { updated_at: new Date().toISOString() } : {};
   await doc.ref.update({ ...vals, ...extra });
   const updated = await doc.ref.get();
   res.json({ id: updated.id, ...updated.data() });

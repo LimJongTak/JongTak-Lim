@@ -26,5 +26,5 @@ ${js.replace(/<\/script/gi, '<\\/script')}
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(path.join(out, 'images'), { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), page);
-for (const f of fs.readdirSync('client/public/images')) fs.copyFileSync(path.join('client/public/images', f), path.join(out, 'images', f));
+fs.cpSync('client/public/images', path.join(out, 'images'), { recursive: true });
 console.log(`✔ ${out}/index.html (${(page.length / 1024).toFixed(0)} KB)`);

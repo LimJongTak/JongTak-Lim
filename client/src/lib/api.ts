@@ -25,6 +25,21 @@ export type Project = {
   highlights: { label: string; value: string }[]; tech: string[];
   github_url: string; demo_url: string; cover: string; accent: string;
   featured: boolean; published?: boolean; sort_order?: number; views: number; likes: number;
+  images?: Photo[];
+};
+
+export type Photo = { src: string; caption: string };
+
+export type PostCategory = 'leadership' | 'festival' | 'community' | 'club' | 'volunteer' | 'startup' | 'etc';
+export type PostSummary = {
+  id: string; slug: string; title: string; excerpt: string; category: PostCategory;
+  period: string; place: string; role: string; tags: string[]; cover: string;
+  featured: boolean; views: number; photo_count: number;
+};
+export type Post = Omit<PostSummary, 'photo_count'> & {
+  images: Photo[]; body: string;
+  prev: { slug: string; title: string } | null;
+  next: { slug: string; title: string } | null;
 };
 
 export type ProjectDetail = Project & {
@@ -82,6 +97,16 @@ export const CATEGORY_LABEL: Record<string, string> = {
   language: 'Language', frontend: 'Frontend', backend: 'Backend', mobile: 'Mobile', tool: 'Tools', design: 'Design',
   web: 'Web', app: 'App',
   award: '수상', certificate: '자격증', completion: '수료',
+};
+
+export const POST_CATEGORY: Record<PostCategory, { label: string; color: string }> = {
+  festival: { label: '축제', color: '#a855f7' },
+  leadership: { label: '리더십', color: '#3b5bdb' },
+  club: { label: '동아리 · 해커톤', color: '#f59e0b' },
+  community: { label: '지역 상생', color: '#ef4444' },
+  startup: { label: '창업', color: '#0ea5e9' },
+  volunteer: { label: '봉사 · 멘토링', color: '#10b981' },
+  etc: { label: '기타', color: '#64748b' },
 };
 
 export function formatDate(s: string) {

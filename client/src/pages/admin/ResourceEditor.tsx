@@ -5,7 +5,7 @@ import ConfirmButton from '../../components/ConfirmButton';
 
 export type Field = {
   key: string; label: string;
-  type: 'text' | 'textarea' | 'number' | 'select' | 'lines' | 'tags' | 'pairs' | 'bool' | 'color';
+  type: 'text' | 'textarea' | 'number' | 'select' | 'lines' | 'tags' | 'pairs' | 'images' | 'markdown' | 'bool' | 'color';
   options?: string[]; required?: boolean; help?: string; wide?: boolean;
 };
 
@@ -17,6 +17,7 @@ function toForm(f: Field, v: unknown): string | boolean {
   if (f.type === 'lines') return ((v as string[]) ?? []).join('\n');
   if (f.type === 'tags') return ((v as string[]) ?? []).join(', ');
   if (f.type === 'pairs') return ((v as { label: string; value: string }[]) ?? []).map(p => `${p.label} | ${p.value}`).join('\n');
+  if (f.type === 'images') return ((v as { src: string; caption: string }[]) ?? []).map(p => `${p.src} | ${p.caption}`).join('\n');
   return v == null ? '' : String(v);
 }
 function fromForm(f: Field, v: string | boolean): unknown {
@@ -25,6 +26,7 @@ function fromForm(f: Field, v: string | boolean): unknown {
   if (f.type === 'number') return Number(s || 0);
   if (f.type === 'lines') return s.split('\n').map(x => x.trim()).filter(Boolean);
   if (f.type === 'tags') return s.split(',').map(x => x.trim()).filter(Boolean);
+  if (f.type === 'images') return s.split('\n').map(x => x.split('|').map(y => y.trim())).filter(x => x[0]).map(([src, ...rest]) => ({ src, caption: rest.join(' | ') }));
   if (f.type === 'pairs') return s.split('\n').map(x => x.split('|').map(y => y.trim())).filter(x => x[0]).map(([label, value]) => ({ label, value: value ?? '' }));
   return s;
 }
@@ -87,7 +89,7 @@ export default function ResourceEditor({ resource, fields, columns, defaults = {
             <header><h3>{editing === 'new' ? '새 항목' : '수정'}</h3><button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>닫기</button></header>
             <div className="adm-fields">
               {fields.map(f => (
-                <div key={f.key} className={`field ${f.wide || ['textarea', 'lines', 'pairs'].includes(f.type) ? 'wide' : ''}`}>
+                <div key={f.key} className={`field ${f.wide || ['textarea', 'lines', 'pairs', 'images', 'markdown'].includes(f.type) ? 'wide' : ''}`}>
                   <label htmlFor={`f-${f.key}`}>{f.label}{f.required && ' *'}</label>
                   {f.type === 'bool' ? (
                     <label className="adm-check"><input id={`f-${f.key}`} type="checkbox" checked={!!form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.checked })} /> 사용</label>
@@ -95,14 +97,14 @@ export default function ResourceEditor({ resource, fields, columns, defaults = {
                     <select id={`f-${f.key}`} className="select" value={String(form[f.key])} onChange={e => setForm({ ...form, [f.key]: e.target.value })}>
                       {f.options!.map(o => <option key={o}>{o}</option>)}
                     </select>
-                  ) : ['textarea', 'lines', 'pairs'].includes(f.type) ? (
-                    <textarea id={`f-${f.key}`} className="textarea" rows={f.type === 'textarea' ? 3 : 4} value={String(form[f.key])} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+                  ) : ['textarea', 'lines', 'pairs', 'images', 'markdown'].includes(f.type) ? (
+                    <textarea id={`f-${f.key}`} className={`textarea ${f.type === 'markdown' ? 'adm-code' : ''}`} rows={f.type === 'textarea' ? 3 : f.type === 'markdown' ? 18 : 4} value={String(form[f.key])} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
                   ) : (
                     <input id={`f-${f.key}`} className="input" type={f.type === 'number' ? 'number' : f.type === 'color' ? 'color' : 'text'} required={f.required}
                       value={String(form[f.key])} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
                   )}
-                  {(f.help || f.type === 'lines' || f.type === 'tags' || f.type === 'pairs') && (
-                    <small className="adm-help">{f.help ?? (f.type === 'lines' ? '한 줄에 하나씩' : f.type === 'tags' ? '쉼표로 구분' : '한 줄에 "라벨 | 값"')}</small>
+                  {(f.help || ['lines', 'tags', 'pairs', 'images'].includes(f.type)) && (
+                    <small className="adm-help">{f.help ?? (f.type === 'lines' ? '한 줄에 하나씩' : f.type === 'tags' ? '쉼표로 구분' : f.type === 'images' ? '한 줄에 "이미지 경로 | 캡션"' : '한 줄에 "라벨 | 값"')}</small>
                   )}
                 </div>
               ))}

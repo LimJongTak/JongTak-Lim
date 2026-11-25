@@ -27,6 +27,7 @@ const PROJECT_FIELDS: Field[] = [
   { key: 'github_url', label: 'GitHub URL', type: 'text', wide: true },
   { key: 'demo_url', label: '데모 URL', type: 'text', wide: true },
   { key: 'cover', label: '커버 이미지 경로/URL', type: 'text', wide: true, help: '/images/파일명.webp 또는 https:// 이미지 주소' },
+  { key: 'images', label: '화면 갤러리', type: 'images' },
   { key: 'sort_order', label: '정렬 순서', type: 'number' },
   { key: 'featured', label: '대표 프로젝트', type: 'bool' },
   { key: 'published', label: '공개', type: 'bool' },
@@ -51,6 +52,23 @@ const AWARD_FIELDS: Field[] = [
   { key: 'description', label: '설명', type: 'textarea' },
 ];
 
+const POST_FIELDS: Field[] = [
+  { key: 'title', label: '제목', type: 'text', required: true, wide: true },
+  { key: 'slug', label: 'Slug (URL)', type: 'text', required: true, help: '영문 소문자, 숫자, - (주소: /blog/slug)' },
+  { key: 'category', label: '분류', type: 'select', options: ['festival', 'leadership', 'club', 'community', 'startup', 'volunteer', 'etc'] },
+  { key: 'period', label: '기간', type: 'text', help: '예: 2025.03 – 2025.12' },
+  { key: 'role', label: '역할', type: 'text' },
+  { key: 'place', label: '장소 / 단체', type: 'text' },
+  { key: 'sort_order', label: '정렬 순서', type: 'number', help: '작을수록 앞에 나옵니다' },
+  { key: 'excerpt', label: '요약 (목록 카드에 표시)', type: 'textarea' },
+  { key: 'cover', label: '표지 이미지', type: 'text', wide: true, help: '비우면 분류 색으로 만든 기본 표지가 나옵니다' },
+  { key: 'images', label: '사진', type: 'images', help: '한 줄에 "이미지 경로 | 캡션". 본문의 [[gallery]] 위치에 나옵니다' },
+  { key: 'body', label: '본문', type: 'markdown', help: '빈 줄로 문단 구분 · ## 소제목 · > 인용 · - 목록 · **굵게** · ![캡션](이미지경로) · [[gallery]] 사진 묶음' },
+  { key: 'tags', label: '태그', type: 'tags', wide: true },
+  { key: 'featured', label: '추천 글', type: 'bool' },
+  { key: 'published', label: '공개', type: 'bool' },
+];
+
 const SKILL_FIELDS: Field[] = [
   { key: 'name', label: '이름', type: 'text', required: true },
   { key: 'category', label: '분류', type: 'select', options: ['language', 'frontend', 'backend', 'mobile', 'tool', 'design'] },
@@ -72,7 +90,7 @@ export default function Admin() {
 
   const logout = async () => { await api('/auth/logout', { method: 'POST' }); setMe(null); };
   const tabs = [
-    ['', '대시보드'], ['projects', '프로젝트'], ['experiences', '경력·활동'], ['awards', '수상·자격'],
+    ['', '대시보드'], ['projects', '프로젝트'], ['posts', '블로그'], ['experiences', '경력·활동'], ['awards', '수상·자격'],
     ['skills', '기술'], ['profile', '프로필'], ['messages', '문의함'], ['guestbook', '방명록'], ['github', 'GitHub'], ['account', '계정'],
   ];
 
@@ -87,6 +105,7 @@ export default function Admin() {
         <Routes>
           <Route index element={<Page title="대시보드"><Dashboard /></Page>} />
           <Route path="projects" element={<Page title="프로젝트"><ResourceEditor resource="projects" fields={PROJECT_FIELDS} columns={['title', 'year', 'category', 'featured', 'published', 'views', 'likes']} defaults={{ year: new Date().getFullYear(), category: 'web', accent: '#8b5cf6', published: true, tech: [], problem: [], process: [], highlights: [] }} /></Page>} />
+          <Route path="posts" element={<Page title="활동 블로그"><ResourceEditor resource="posts" fields={POST_FIELDS} columns={['title', 'category', 'period', 'images', 'published', 'views']} defaults={{ category: 'etc', published: true, tags: [], images: [], body: '## 소제목\n\n본문을 입력하세요.\n\n[[gallery]]', sort_order: 0 }} /></Page>} />
           <Route path="experiences" element={<Page title="경력 · 활동"><ResourceEditor resource="experiences" fields={EXP_FIELDS} columns={['org', 'title', 'category', 'start_date', 'end_date']} defaults={{ category: 'leadership', items: [] }} /></Page>} />
           <Route path="awards" element={<Page title="수상 · 자격 · 수료"><ResourceEditor resource="awards" fields={AWARD_FIELDS} columns={['title', 'kind', 'date', 'issuer']} defaults={{ kind: 'award' }} /></Page>} />
           <Route path="skills" element={<Page title="기술 스택"><ResourceEditor resource="skills" fields={SKILL_FIELDS} columns={['name', 'category', 'sort_order']} defaults={{ category: 'frontend' }} /></Page>} />

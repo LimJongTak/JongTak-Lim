@@ -90,6 +90,35 @@ publicRouter.post('/projects/:slug/like', likeLimiter, ah(async (req, res) => {
   res.json({ liked: !likeDoc.exists, likes: updated.data()?.likes ?? 0 });
 }));
 
+/* ───────────── 활동 블로그 ───────────── */
+
+const POST_LIST_FIELDS = ['slug', 'title', 'excerpt', 'category', 'period', 'place', 'role', 'tags', 'cover', 'featured', 'views', 'sort_order'] as const;
+type PostDoc = { [key: string]: unknown; id: string; slug: string; title: string; published?: boolean };
+
+/** 공개된 글 목록 (복합 인덱스 없이 sort_order 하나로 정렬 후 공개 여부는 메모리에서 거른다) */
+async function publishedPosts() {
+  const snap = await fdb.collection('posts').orderBy('sort_order').get();
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }) as PostDoc).filter(p => p.published !== false);
+}
+
+publicRouter.get('/posts', ah(async (_req, res) => {
+  const posts = await publishedPosts();
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json(posts.map(p => ({
+    id: p.id,
+    ...Object.fromEntries(POST_LIST_FIELDS.map(k => [k, p[k]])),
+    photo_count: Array.isArray(p.images) ? p.images.length : 0,
+  })));
+}));
+
+publicRouter.get('/posts/:slug', ah(async (req, res) => {
+  const posts = await publishedPosts();
+  const idx = posts.findIndex(p => p.slug === String(req.params.slug));
+  if (idx < 0) throw new HttpError(404, '글을 찾을 수 없습니다.');
+  const pick = (p?: PostDoc) => p ? { slug: p.slug, title: p.title } : null;
+  res.json({ ...posts[idx], prev: pick(posts[idx - 1]), next: pick(posts[idx + 1]) });
+}));
+
 publicRouter.get('/github/repos', ah(async (_req, res) => {
   const snap = await fdb.collection('github_repos').where('hidden', '==', false).orderBy('pushed_at', 'desc').get();
   res.json(snap.docs.map(d => ({ name: d.id, ...d.data() })));
@@ -122,9 +151,11 @@ publicRouter.post('/track', trackLimiter, ah(async (req, res) => {
       referrer: body.referrer,
       created_at: new Date().toISOString(),
     });
-    const m = body.path.match(/^\/projects\/([\w-]+)$/);
+    // 프로젝트·블로그 글 상세 페이지 조회수
+    const m = body.path.match(/^\/(projects|blog)\/([\w-]+)$/);
     if (m) {
-      const pSnap = await fdb.collection('projects').where('slug', '==', m[1]).limit(1).get();
+      const col = m[1] === 'blog' ? 'posts' : 'projects';
+      const pSnap = await fdb.collection(col).where('slug', '==', m[2]).limit(1).get();
       if (!pSnap.empty) await pSnap.docs[0].ref.update({ views: FieldValue.increment(1) });
     }
   }

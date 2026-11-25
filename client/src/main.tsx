@@ -4,6 +4,8 @@ import { BrowserRouter, Link, MemoryRouter, Route, Routes } from 'react-router-d
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import ProjectDetail from './pages/ProjectDetail';
+import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import './styles/global.css';
 
 // 관리자 화면은 방문자가 받을 필요 없으므로 별도 청크로 분리
@@ -32,6 +34,8 @@ createRoot(document.getElementById('root')!).render(
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="projects/:slug" element={<ProjectDetail />} />
+          <Route path="blog" element={<Blog />} />
+          <Route path="blog/:slug" element={<BlogPost />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

@@ -3,10 +3,11 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useApi, usePageTracking, useReveal, useTheme } from '../lib/hooks';
 import { ArrowUp, Close, Menu, Moon, Sun } from './Icons';
 
-const LINKS = [
+const LINKS: { id: string; label: string; to?: string }[] = [
   { id: 'about', label: 'About' },
   { id: 'projects', label: 'Projects' },
   { id: 'experience', label: 'Experience' },
+  { id: 'activity', label: 'Blog', to: '/blog' },
   { id: 'awards', label: 'Awards' },
   { id: 'guestbook', label: 'Guestbook' },
   { id: 'contact', label: 'Contact' },
@@ -65,7 +66,7 @@ export default function Layout() {
           </Link>
           <nav className="nav-links" aria-label="주요 메뉴">
             {LINKS.map(l => (
-              <Link key={l.id} to={`/#${l.id}`} className={active === l.id ? 'active' : ''}>{l.label}</Link>
+              <Link key={l.id} to={l.to ?? `/#${l.id}`} className={active === l.id || (l.to && pathname.startsWith(l.to)) ? 'active' : ''}>{l.label}</Link>
             ))}
           </nav>
           <div className="nav-actions">
@@ -79,7 +80,7 @@ export default function Layout() {
         </div>
       </header>
       <nav className={`mobile-menu ${open ? 'open' : ''}`} aria-hidden={!open}>
-        {LINKS.map(l => <Link key={l.id} to={`/#${l.id}`} tabIndex={open ? 0 : -1}>{l.label}</Link>)}
+        {LINKS.map(l => <Link key={l.id} to={l.to ?? `/#${l.id}`} tabIndex={open ? 0 : -1}>{l.label}</Link>)}
       </nav>
 
       <main><Outlet /></main>

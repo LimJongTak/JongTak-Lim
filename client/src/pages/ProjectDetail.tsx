@@ -3,11 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import { api, CATEGORY_LABEL, type ProjectDetail as PD } from '../lib/api';
 import { useApi } from '../lib/hooks';
 import * as I from '../components/Icons';
+import Gallery, { Lightbox, useLightbox } from '../components/Gallery';
 
 export default function ProjectDetail() {
   const { slug } = useParams();
   const { data: p, setData, error } = useApi<PD>(`/projects/${slug}`);
   const [busy, setBusy] = useState(false);
+  const lb = useLightbox(p?.images ?? []);
 
   useEffect(() => { if (p) document.title = `${p.title} | 임종탁`; }, [p]);
 
@@ -48,6 +50,7 @@ export default function ProjectDetail() {
             {!!p.problem?.length && <section><h2>Problem</h2><ol className="num-list">{p.problem.map((x, i) => <li key={i}>{x}</li>)}</ol></section>}
             {!!p.process?.length && <section><h2>Process</h2><ol className="num-list">{p.process.map((x, i) => <li key={i}>{x}</li>)}</ol></section>}
             {p.insight && <section><h2>Insight</h2><p className="insight">“{p.insight}”</p></section>}
+            {!!p.images?.length && <section><h2>Screens</h2><Gallery images={p.images} onOpen={lb.open} /></section>}
           </article>
           <aside className="side">
             <button className={`btn btn-ghost like-btn ${p.liked ? 'liked' : ''}`} onClick={like} disabled={busy} aria-pressed={p.liked}>
@@ -73,6 +76,7 @@ export default function ProjectDetail() {
           {p.next && <Link to={`/projects/${p.next.slug}`} className="next"><small>다음 프로젝트 →</small><b>{p.next.title}</b></Link>}
         </nav>
       </div>
+      <Lightbox photos={p.images ?? []} index={lb.index} onClose={lb.close} onIndex={lb.setIndex} />
     </div>
   );
 }

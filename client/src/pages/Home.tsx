@@ -3,6 +3,7 @@ import type { PortfolioData } from '../lib/api';
 import { useApi } from '../lib/hooks';
 import { About, Awards, ExperienceSection, Future, GithubSection, Growth, Hero, Philosophy, Projects } from '../components/Sections';
 import { Contact, Guestbook } from '../components/Community';
+import ActivityLog from '../components/ActivityLog';
 
 export default function Home() {
   const { data, error } = useApi<PortfolioData>('/portfolio');
@@ -20,6 +21,7 @@ export default function Home() {
       <Philosophy profile={profile} />
       <Projects projects={data.projects} />
       <ExperienceSection items={data.experiences} />
+      <ActivityLog />
       <Growth profile={profile} />
       <Awards items={data.awards} />
       <Future profile={profile} />
