@@ -19,12 +19,12 @@ export type Profile = {
 };
 
 export type Project = {
-  id: number; slug: string; title: string; subtitle: string; year: number; period: string;
+  id: string; slug: string; title: string; subtitle: string; year: number; period: string;
   category: 'web' | 'app' | 'etc'; role: string; team: string; summary: string;
   problem?: string[]; process?: string[]; insight?: string;
   highlights: { label: string; value: string }[]; tech: string[];
   github_url: string; demo_url: string; cover: string; accent: string;
-  featured: boolean; published?: number; sort_order?: number; views: number; likes: number;
+  featured: boolean; published?: boolean; sort_order?: number; views: number; likes: number;
 };
 
 export type ProjectDetail = Project & {
@@ -34,14 +34,14 @@ export type ProjectDetail = Project & {
 };
 
 export type Experience = {
-  id: number; category: string; org: string; title: string;
+  id: string; category: string; org: string; title: string;
   start_date: string; end_date: string; items: string[]; sort_order: number;
 };
-export type Award = { id: number; kind: 'award' | 'certificate' | 'completion'; date: string; title: string; issuer: string; description: string; sort_order: number };
-export type Skill = { id?: number; name: string; category: string; sort_order?: number };
-export type Repo = { name: string; description: string; language: string; html_url: string; homepage: string; stars: number; pushed_at: string; hidden?: number };
-export type GuestbookEntry = { id: number; name: string; message: string; reply: string; created_at: string; is_hidden?: number };
-export type Message = { id: number; name: string; email: string; company: string; subject: string; message: string; is_read: number; created_at: string };
+export type Award = { id: string; kind: 'award' | 'certificate' | 'completion'; date: string; title: string; issuer: string; description: string; sort_order: number };
+export type Skill = { id?: string; name: string; category: string; sort_order?: number };
+export type Repo = { name: string; description: string; language: string; html_url: string; homepage: string; stars: number; pushed_at: string; hidden?: boolean };
+export type GuestbookEntry = { id: string; name: string; message: string; reply: string; created_at: string; is_hidden?: boolean };
+export type Message = { id: string; name: string; email: string; company: string; subject: string; message: string; is_read: boolean; created_at: string };
 
 export type PortfolioData = {
   profile: Profile; skills: Skill[]; experiences: Experience[]; awards: Award[]; projects: Project[]; repos: Repo[];

@@ -9,7 +9,7 @@ export type Field = {
   options?: string[]; required?: boolean; help?: string; wide?: boolean;
 };
 
-type Row = Record<string, unknown> & { id: number };
+type Row = Record<string, unknown> & { id: string };
 
 /** 폼 문자열 ↔ API 값 변환 */
 function toForm(f: Field, v: unknown): string | boolean {
@@ -70,7 +70,7 @@ export default function ResourceEditor({ resource, fields, columns, defaults = {
           <tbody>
             {data?.map(row => (
               <tr key={row.id}>
-                {columns.map(c => <td key={c}>{Array.isArray(row[c]) ? (row[c] as unknown[]).length + '개' : typeof row[c] === 'number' && (c === 'featured' || c === 'published') ? (row[c] ? '✔' : '') : String(row[c] ?? '')}</td>)}
+                {columns.map(c => <td key={c}>{Array.isArray(row[c]) ? (row[c] as unknown[]).length + '개' : (c === 'featured' || c === 'published') ? (row[c] ? '✔' : '') : String(row[c] ?? '')}</td>)}
                 <td className="adm-actions">
                   <button className="btn btn-ghost btn-sm" onClick={() => open(row)}>수정</button>
                   <ConfirmButton onConfirm={() => remove(row)} />

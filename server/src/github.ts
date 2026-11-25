@@ -1,4 +1,4 @@
-import { db, tx } from './db.js';
+import { fdb } from './db.js';
 import { config } from './config.js';
 
 type GhRepo = {
@@ -7,7 +7,7 @@ type GhRepo = {
 };
 
 /**
- * GitHub 공개 레포 목록을 가져와 github_repos 테이블에 upsert 한다.
+ * GitHub 공개 레포 목록을 가져와 github_repos 컬렉션에 upsert 한다.
  * 관리자가 숨김 처리한 레포(hidden)는 유지된다.
  */
 export async function syncGithubRepos(): Promise<number> {
@@ -23,17 +23,21 @@ export async function syncGithubRepos(): Promise<number> {
     if (batch.length < 100) break;
   }
 
-  const upsert = db.prepare(`INSERT INTO github_repos (name, description, language, html_url, homepage, stars, pushed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(name) DO UPDATE SET description = excluded.description, language = excluded.language,
-      html_url = excluded.html_url, homepage = excluded.homepage, stars = excluded.stars, pushed_at = excluded.pushed_at`);
-
   const list = repos.filter(r => !r.fork && !r.private && r.name !== config.githubUser);
-  tx(() => {
-    for (const r of list) {
-      upsert.run(r.name, r.description ?? '', r.language ?? '', r.html_url, r.homepage ?? '', r.stargazers_count, r.pushed_at.slice(0, 10));
-    }
-  });
+  const batch = fdb.batch();
+  for (const r of list) {
+    const ref = fdb.collection('github_repos').doc(r.name);
+    // merge: true 로 hidden 필드를 덮어쓰지 않음
+    batch.set(ref, {
+      description: r.description ?? '',
+      language: r.language ?? '',
+      html_url: r.html_url,
+      homepage: r.homepage ?? '',
+      stars: r.stargazers_count,
+      pushed_at: r.pushed_at.slice(0, 10),
+    }, { merge: true });
+  }
+  await batch.commit();
   return list.length;
 }
 

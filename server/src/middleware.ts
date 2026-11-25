@@ -29,8 +29,8 @@ export function visitorHash(req: Request, daily = true): string {
 
 export const AUTH_COOKIE = 'jt_admin';
 
-export function signAdmin(id: number, username: string) {
-  return jwt.sign({ sub: String(id), username }, config.jwtSecret, { expiresIn: '7d' });
+export function signAdmin(id: string, username: string) {
+  return jwt.sign({ sub: id, username }, config.jwtSecret, { expiresIn: '7d' });
 }
 
 export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
@@ -39,7 +39,7 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
   if (!token) return next(new HttpError(401, '로그인이 필요합니다.'));
   try {
     const payload = jwt.verify(token, config.jwtSecret) as { sub: string; username: string };
-    (req as Request & { admin?: unknown }).admin = { id: Number(payload.sub), username: payload.username };
+    (req as Request & { admin?: unknown }).admin = { id: payload.sub, username: payload.username };
     next();
   } catch {
     next(new HttpError(401, '세션이 만료되었습니다. 다시 로그인해 주세요.'));
@@ -51,8 +51,6 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return res.status(400).json({ error: '입력값을 확인해 주세요.', issues: err.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
   }
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/UNIQUE constraint failed/.test(msg)) return res.status(409).json({ error: '이미 존재하는 값입니다.' });
   console.error(err);
   res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 }

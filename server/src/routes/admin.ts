@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z, type ZodObject, type ZodRawShape } from 'zod';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
-import { db, getSetting, parseJsonCols, setSetting } from '../db.js';
+import { fdb, getSetting, setSetting } from '../db.js';
 import { config } from '../config.js';
 import { ah, AUTH_COOKIE, HttpError, parse, requireAdmin, signAdmin } from '../middleware.js';
 import { syncGithubRepos } from '../github.js';
@@ -21,12 +21,14 @@ const LoginBody = z.object({ username: z.string().min(1).max(50), password: z.st
 
 authRouter.post('/login', loginLimiter, ah(async (req, res) => {
   const { username, password } = parse(LoginBody, req.body);
-  const admin = db.prepare('SELECT id, username, password_hash FROM admins WHERE username = ?').get(username) as
-    { id: number; username: string; password_hash: string } | undefined;
-  if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
+  const snap = await fdb.collection('admins').where('username', '==', username).limit(1).get();
+  if (snap.empty) throw new HttpError(401, '아이디 또는 비밀번호가 올바르지 않습니다.');
+  const doc = snap.docs[0];
+  const admin = doc.data() as { username: string; password_hash: string };
+  if (!(await bcrypt.compare(password, admin.password_hash))) {
     throw new HttpError(401, '아이디 또는 비밀번호가 올바르지 않습니다.');
   }
-  const token = signAdmin(admin.id, admin.username);
+  const token = signAdmin(doc.id, admin.username);
   res.cookie(AUTH_COOKIE, token, {
     httpOnly: true, sameSite: 'strict', secure: config.isProd, maxAge: 7 * 24 * 3600_000, path: '/api',
   });
@@ -46,10 +48,12 @@ const PasswordBody = z.object({ current: z.string().min(1), next: z.string().min
 
 authRouter.put('/password', requireAdmin, ah(async (req, res) => {
   const { current, next } = parse(PasswordBody, req.body);
-  const { id } = (req as unknown as { admin: { id: number } }).admin;
-  const row = db.prepare('SELECT password_hash FROM admins WHERE id = ?').get(id) as { password_hash: string };
-  if (!(await bcrypt.compare(current, row.password_hash))) throw new HttpError(403, '현재 비밀번호가 올바르지 않습니다.');
-  db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(next, 12), id);
+  const { id } = (req as unknown as { admin: { id: string } }).admin;
+  const doc = await fdb.collection('admins').doc(id).get();
+  if (!doc.exists) throw new HttpError(500, '계정을 찾을 수 없습니다.');
+  const { password_hash } = doc.data() as { password_hash: string };
+  if (!(await bcrypt.compare(current, password_hash))) throw new HttpError(403, '현재 비밀번호가 올바르지 않습니다.');
+  await doc.ref.update({ password_hash: await bcrypt.hash(next, 12) });
   res.status(204).end();
 }));
 
@@ -57,13 +61,11 @@ authRouter.put('/password', requireAdmin, ah(async (req, res) => {
 
 adminRouter.use(requireAdmin);
 
-/** 콘텐츠 테이블별 스키마. 여기 정의된 필드만 쓸 수 있다(컬럼 화이트리스트). */
+/** 콘텐츠 컬렉션별 스키마 */
 const strArr = z.array(z.string().max(300)).max(30);
-const RESOURCES: Record<string, { table: string; schema: ZodObject<ZodRawShape>; json: string[]; order: string }> = {
+const RESOURCES: Record<string, { collection: string; schema: ZodObject<ZodRawShape> }> = {
   projects: {
-    table: 'projects',
-    json: ['problem', 'process', 'highlights', 'tech'],
-    order: 'featured DESC, sort_order, id',
+    collection: 'projects',
     schema: z.object({
       slug: z.string().regex(/^[a-z0-9-]+$/, '영문 소문자, 숫자, - 만 사용').max(60),
       title: z.string().min(1).max(100),
@@ -89,9 +91,7 @@ const RESOURCES: Record<string, { table: string; schema: ZodObject<ZodRawShape>;
     }),
   },
   experiences: {
-    table: 'experiences',
-    json: ['items'],
-    order: 'sort_order, id',
+    collection: 'experiences',
     schema: z.object({
       category: z.enum(['education', 'leadership', 'club', 'volunteer', 'work', 'etc']),
       org: z.string().min(1).max(100),
@@ -103,9 +103,7 @@ const RESOURCES: Record<string, { table: string; schema: ZodObject<ZodRawShape>;
     }),
   },
   awards: {
-    table: 'awards',
-    json: [],
-    order: 'sort_order, id',
+    collection: 'awards',
     schema: z.object({
       kind: z.enum(['award', 'certificate', 'completion']),
       date: z.string().max(20),
@@ -116,9 +114,7 @@ const RESOURCES: Record<string, { table: string; schema: ZodObject<ZodRawShape>;
     }),
   },
   skills: {
-    table: 'skills',
-    json: [],
-    order: 'sort_order, id',
+    collection: 'skills',
     schema: z.object({
       name: z.string().min(1).max(40),
       category: z.enum(['language', 'frontend', 'backend', 'mobile', 'tool', 'design']),
@@ -127,135 +123,195 @@ const RESOURCES: Record<string, { table: string; schema: ZodObject<ZodRawShape>;
   },
 };
 
-function toDbValues(data: Record<string, unknown>, json: string[]) {
-  const out: Record<string, string | number | null> = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (v === undefined) continue;
-    if (json.includes(k)) out[k] = JSON.stringify(v);
-    else if (typeof v === 'boolean') out[k] = v ? 1 : 0;
-    else out[k] = v as string | number | null;
-  }
-  return out;
-}
-
 function resource(name: string) {
   const r = RESOURCES[name];
   if (!r) throw new HttpError(404, '알 수 없는 리소스입니다.');
   return r;
 }
 
-adminRouter.get('/content/:resource', ah((req, res) => {
+adminRouter.get('/content/:resource', ah(async (req, res) => {
   const r = resource(String(req.params.resource));
-  const rows = db.prepare(`SELECT * FROM ${r.table} ORDER BY ${r.order}`).all() as Record<string, unknown>[];
-  res.json(rows.map(row => parseJsonCols(row, r.json)));
+  const snap = await fdb.collection(r.collection).orderBy('sort_order').get();
+  res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
 }));
 
-adminRouter.post('/content/:resource', ah((req, res) => {
-  const r = resource(String(req.params.resource));
-  const vals = toDbValues(parse(r.schema, req.body), r.json);
-  const cols = Object.keys(vals);
-  const result = db.prepare(`INSERT INTO ${r.table} (${cols.join(', ')}) VALUES (${cols.map(c => ':' + c).join(', ')})`).run(vals);
-  const row = db.prepare(`SELECT * FROM ${r.table} WHERE id = ?`).get(result.lastInsertRowid) as Record<string, unknown>;
-  res.status(201).json(parseJsonCols(row, r.json));
+adminRouter.post('/content/:resource', ah(async (req, res) => {
+  const name = String(req.params.resource);
+  const r = resource(name);
+  const vals = parse(r.schema, req.body) as Record<string, unknown>;
+  const now = new Date().toISOString();
+
+  // slug 중복 체크 (projects)
+  if (name === 'projects' && vals.slug) {
+    const dup = await fdb.collection('projects').where('slug', '==', vals.slug).limit(1).get();
+    if (!dup.empty) throw new HttpError(409, '이미 존재하는 슬러그입니다.');
+  }
+
+  const extra = name === 'projects' ? { views: 0, likes: 0, updated_at: now } : {};
+  const ref = await fdb.collection(r.collection).add({ ...vals, ...extra, created_at: now });
+  const doc = await ref.get();
+  res.status(201).json({ id: ref.id, ...doc.data() });
 }));
 
-adminRouter.put('/content/:resource/:id', ah((req, res) => {
-  const r = resource(String(req.params.resource));
-  const id = Number(req.params.id);
-  // zod 4는 partial()에서도 default를 채우므로, 요청에 실제로 온 키만 남긴다
+adminRouter.put('/content/:resource/:id', ah(async (req, res) => {
+  const name = String(req.params.resource);
+  const r = resource(name);
+  const id = String(req.params.id);
+  const doc = await fdb.collection(r.collection).doc(id).get();
+  if (!doc.exists) throw new HttpError(404, '항목을 찾을 수 없습니다.');
+
+  // 요청에 실제로 온 키만 업데이트
   const sent = new Set(Object.keys(req.body ?? {}));
   const parsed = parse(r.schema.partial(), req.body) as Record<string, unknown>;
-  const vals = toDbValues(Object.fromEntries(Object.entries(parsed).filter(([k]) => sent.has(k))), r.json);
-  const cols = Object.keys(vals);
-  if (cols.length === 0) throw new HttpError(400, '변경할 값이 없습니다.');
-  const touch = r.table === 'projects' ? ", updated_at = datetime('now')" : '';
-  const result = db.prepare(`UPDATE ${r.table} SET ${cols.map(c => `${c} = :${c}`).join(', ')}${touch} WHERE id = :id`)
-    .run({ ...vals, id });
-  if (result.changes === 0) throw new HttpError(404, '항목을 찾을 수 없습니다.');
-  const row = db.prepare(`SELECT * FROM ${r.table} WHERE id = ?`).get(id) as Record<string, unknown>;
-  res.json(parseJsonCols(row, r.json));
+  const vals = Object.fromEntries(Object.entries(parsed).filter(([k]) => sent.has(k)));
+  if (Object.keys(vals).length === 0) throw new HttpError(400, '변경할 값이 없습니다.');
+
+  const extra = name === 'projects' ? { updated_at: new Date().toISOString() } : {};
+  await doc.ref.update({ ...vals, ...extra });
+  const updated = await doc.ref.get();
+  res.json({ id: updated.id, ...updated.data() });
 }));
 
-adminRouter.delete('/content/:resource/:id', ah((req, res) => {
+adminRouter.delete('/content/:resource/:id', ah(async (req, res) => {
   const r = resource(String(req.params.resource));
-  const result = db.prepare(`DELETE FROM ${r.table} WHERE id = ?`).run(Number(req.params.id));
-  if (result.changes === 0) throw new HttpError(404, '항목을 찾을 수 없습니다.');
+  const id = String(req.params.id);
+  const doc = await fdb.collection(r.collection).doc(id).get();
+  if (!doc.exists) throw new HttpError(404, '항목을 찾을 수 없습니다.');
+  await doc.ref.delete();
   res.status(204).end();
 }));
 
-/* 프로필(메인 문구, 연락처, 철학 섹션 등)은 JSON 한 덩어리로 관리 */
-adminRouter.get('/profile', (_req, res) => { res.json(getSetting('profile', {})); });
-adminRouter.put('/profile', ah((req, res) => {
+/* 프로필 JSON 한 덩어리로 관리 */
+adminRouter.get('/profile', ah(async (_req, res) => { res.json(await getSetting('profile', {})); }));
+adminRouter.put('/profile', ah(async (req, res) => {
   const body = parse(z.record(z.string(), z.unknown()), req.body);
-  setSetting('profile', body);
+  await setSetting('profile', body);
   res.json(body);
 }));
 
 /* ───────────── 문의함 ───────────── */
 
-adminRouter.get('/messages', ah((_req, res) => {
-  res.json(db.prepare('SELECT * FROM messages ORDER BY id DESC').all());
+adminRouter.get('/messages', ah(async (_req, res) => {
+  const snap = await fdb.collection('messages').orderBy('created_at', 'desc').get();
+  res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
 }));
-adminRouter.patch('/messages/:id', ah((req, res) => {
+adminRouter.patch('/messages/:id', ah(async (req, res) => {
   const { is_read } = parse(z.object({ is_read: z.boolean() }), req.body);
-  db.prepare('UPDATE messages SET is_read = ? WHERE id = ?').run(is_read ? 1 : 0, Number(req.params.id));
+  const doc = await fdb.collection('messages').doc(String(req.params.id)).get();
+  if (!doc.exists) throw new HttpError(404, '문의를 찾을 수 없습니다.');
+  await doc.ref.update({ is_read });
   res.status(204).end();
 }));
-adminRouter.delete('/messages/:id', ah((req, res) => {
-  db.prepare('DELETE FROM messages WHERE id = ?').run(Number(req.params.id));
+adminRouter.delete('/messages/:id', ah(async (req, res) => {
+  const doc = await fdb.collection('messages').doc(String(req.params.id)).get();
+  if (!doc.exists) throw new HttpError(404, '문의를 찾을 수 없습니다.');
+  await doc.ref.delete();
   res.status(204).end();
 }));
 
 /* ───────────── 방명록 관리 ───────────── */
 
-adminRouter.get('/guestbook', ah((_req, res) => {
-  res.json(db.prepare('SELECT id, name, message, reply, is_hidden, created_at FROM guestbook ORDER BY id DESC').all());
+adminRouter.get('/guestbook', ah(async (_req, res) => {
+  const snap = await fdb.collection('guestbook').orderBy('created_at', 'desc').get();
+  res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
 }));
-adminRouter.patch('/guestbook/:id', ah((req, res) => {
+adminRouter.patch('/guestbook/:id', ah(async (req, res) => {
   const body = parse(z.object({ is_hidden: z.boolean().optional(), reply: z.string().max(500).optional() }), req.body);
-  const id = Number(req.params.id);
-  if (body.is_hidden !== undefined) db.prepare('UPDATE guestbook SET is_hidden = ? WHERE id = ?').run(body.is_hidden ? 1 : 0, id);
-  if (body.reply !== undefined) db.prepare('UPDATE guestbook SET reply = ? WHERE id = ?').run(body.reply, id);
+  const doc = await fdb.collection('guestbook').doc(String(req.params.id)).get();
+  if (!doc.exists) throw new HttpError(404, '글을 찾을 수 없습니다.');
+  const update: Record<string, unknown> = {};
+  if (body.is_hidden !== undefined) update.is_hidden = body.is_hidden;
+  if (body.reply !== undefined) update.reply = body.reply;
+  if (Object.keys(update).length) await doc.ref.update(update);
   res.status(204).end();
 }));
-adminRouter.delete('/guestbook/:id', ah((req, res) => {
-  db.prepare('DELETE FROM guestbook WHERE id = ?').run(Number(req.params.id));
+adminRouter.delete('/guestbook/:id', ah(async (req, res) => {
+  const doc = await fdb.collection('guestbook').doc(String(req.params.id)).get();
+  if (!doc.exists) throw new HttpError(404, '글을 찾을 수 없습니다.');
+  await doc.ref.delete();
   res.status(204).end();
 }));
 
 /* ───────────── 대시보드 통계 ───────────── */
 
-adminRouter.get('/stats', ah((_req, res) => {
-  const one = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
+adminRouter.get('/stats', ah(async (_req, res) => {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+
+  const [allViewsSnap, unreadSnap, guestbookSnap, likesSnap, projectsSnap] = await Promise.all([
+    fdb.collection('page_views').get(),
+    fdb.collection('messages').where('is_read', '==', false).count().get(),
+    fdb.collection('guestbook').count().get(),
+    fdb.collection('project_likes').count().get(),
+    fdb.collection('projects').orderBy('views', 'desc').get(),
+  ]);
+
+  const allViews = allViewsSnap.docs.map(d => d.data() as { visitor_hash: string; path: string; referrer: string; created_at: string });
+
+  // 전체 / 오늘 방문자 (중복 제거)
+  const totalVisitors = new Set(allViews.map(v => v.visitor_hash)).size;
+  const todayVisitors = new Set(allViews.filter(v => v.created_at >= todayStart.toISOString()).map(v => v.visitor_hash)).size;
+
+  // 최근 30일
+  const recent = allViews.filter(v => v.created_at >= thirtyDaysAgo);
+
+  // 일별 집계
+  const dailyMap = new Map<string, { views: number; visitors: Set<string> }>();
+  for (const v of recent) {
+    const day = v.created_at.slice(0, 10);
+    if (!dailyMap.has(day)) dailyMap.set(day, { views: 0, visitors: new Set() });
+    const e = dailyMap.get(day)!;
+    e.views++;
+    e.visitors.add(v.visitor_hash);
+  }
+  const daily = Array.from(dailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, { views, visitors }]) => ({ day, views, visitors: visitors.size }));
+
+  // 많이 본 경로 TOP 10
+  const pathMap = new Map<string, number>();
+  for (const v of allViews) pathMap.set(v.path, (pathMap.get(v.path) ?? 0) + 1);
+  const topPaths = Array.from(pathMap.entries())
+    .sort(([, a], [, b]) => b - a).slice(0, 10)
+    .map(([path, views]) => ({ path, views }));
+
+  // 유입 경로 TOP 10
+  const refMap = new Map<string, number>();
+  for (const v of allViews) if (v.referrer) refMap.set(v.referrer, (refMap.get(v.referrer) ?? 0) + 1);
+  const topReferrers = Array.from(refMap.entries())
+    .sort(([, a], [, b]) => b - a).slice(0, 10)
+    .map(([referrer, views]) => ({ referrer, views }));
+
   res.json({
     totals: {
-      visitors: one('SELECT COUNT(DISTINCT visitor_hash) AS c FROM page_views'),
-      pageViews: one('SELECT COUNT(*) AS c FROM page_views'),
-      todayVisitors: one(`SELECT COUNT(DISTINCT visitor_hash) AS c FROM page_views WHERE date(created_at) = date('now')`),
-      unreadMessages: one('SELECT COUNT(*) AS c FROM messages WHERE is_read = 0'),
-      guestbook: one('SELECT COUNT(*) AS c FROM guestbook'),
-      likes: one('SELECT COUNT(*) AS c FROM project_likes'),
+      visitors: totalVisitors,
+      pageViews: allViews.length,
+      todayVisitors,
+      unreadMessages: unreadSnap.data().count,
+      guestbook: guestbookSnap.data().count,
+      likes: likesSnap.data().count,
     },
-    daily: db.prepare(`SELECT date(created_at) AS day, COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS visitors
-      FROM page_views WHERE created_at > datetime('now', '-30 days') GROUP BY day ORDER BY day`).all(),
-    topPaths: db.prepare(`SELECT path, COUNT(*) AS views FROM page_views GROUP BY path ORDER BY views DESC LIMIT 10`).all(),
-    topReferrers: db.prepare(`SELECT referrer, COUNT(*) AS views FROM page_views WHERE referrer <> ''
-      GROUP BY referrer ORDER BY views DESC LIMIT 10`).all(),
-    projects: db.prepare('SELECT slug, title, views, likes FROM projects ORDER BY views DESC').all(),
+    daily,
+    topPaths,
+    topReferrers,
+    projects: projectsSnap.docs.map(d => ({ slug: d.data().slug, title: d.data().title, views: d.data().views, likes: d.data().likes })),
   });
 }));
 
 /* ───────────── GitHub 레포 ───────────── */
 
-adminRouter.get('/github', ah((_req, res) => {
-  res.json(db.prepare('SELECT * FROM github_repos ORDER BY pushed_at DESC').all());
+adminRouter.get('/github', ah(async (_req, res) => {
+  const snap = await fdb.collection('github_repos').orderBy('pushed_at', 'desc').get();
+  res.json(snap.docs.map(d => ({ name: d.id, ...d.data() })));
 }));
 adminRouter.post('/github/sync', ah(async (_req, res) => {
   const count = await syncGithubRepos();
   res.json({ synced: count });
 }));
-adminRouter.patch('/github/:name', ah((req, res) => {
+adminRouter.patch('/github/:name', ah(async (req, res) => {
   const { hidden } = parse(z.object({ hidden: z.boolean() }), req.body);
-  db.prepare('UPDATE github_repos SET hidden = ? WHERE name = ?').run(hidden ? 1 : 0, String(req.params.name));
+  const doc = await fdb.collection('github_repos').doc(String(req.params.name)).get();
+  if (!doc.exists) throw new HttpError(404, '레포를 찾을 수 없습니다.');
+  await doc.ref.update({ hidden });
   res.status(204).end();
 }));

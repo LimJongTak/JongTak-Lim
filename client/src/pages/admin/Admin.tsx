@@ -202,12 +202,12 @@ function ProfileEditor() {
 
 function Messages() {
   const { data, setData } = useApi<Message[]>('/admin/messages');
-  const [open, setOpen] = useState<number | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   if (!data) return <div className="loader" />;
   if (!data.length) return <p className="empty">아직 받은 문의가 없습니다.</p>;
   const mark = async (m: Message, is_read: boolean) => {
     await api(`/admin/messages/${m.id}`, { method: 'PATCH', json: { is_read } });
-    setData(data.map(x => x.id === m.id ? { ...x, is_read: is_read ? 1 : 0 } : x));
+    setData(data.map(x => x.id === m.id ? { ...x, is_read } : x));
   };
   const del = async (m: Message) => {
     await api(`/admin/messages/${m.id}`, { method: 'DELETE' });

@@ -13,7 +13,7 @@ function required(name: string, devFallback: string): string {
 export const config = {
   isProd,
   port: Number(process.env.PORT ?? 4000),
-  dbPath: path.resolve(process.env.DB_PATH ?? 'data/portfolio.db'),
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? 'jongtak-lim',
   jwtSecret: required('JWT_SECRET', 'dev-only-secret-change-me'),
   /** 방문자 IP를 해시할 때 쓰는 salt. 원본 IP는 저장하지 않는다. */
   hashSalt: process.env.HASH_SALT ?? crypto.createHash('sha256').update('jongtak-portfolio').digest('hex'),
@@ -24,5 +24,5 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN ?? '',
   /** 문의가 들어오면 POST로 알려줄 웹훅(슬랙/디스코드 등). 선택. */
   notifyWebhook: process.env.NOTIFY_WEBHOOK_URL ?? '',
-  clientDist: path.resolve(process.env.CLIENT_DIST ?? '../client/dist'),
+  clientDist: path.resolve(process.env.CLIENT_DIST ?? (isProd ? './public' : '../client/dist')),
 };
