@@ -14,9 +14,13 @@
     "start": "npm run start --workspace server",
     "seed": "npm run seed --workspace server",
     "build:preview": "vite build -c client/vite.preview.config.ts client && node scripts/build-preview.mjs",
-    "build:deploy": "node scripts/build-deploy.mjs"
+    "build:deploy": "node scripts/build-deploy.mjs",
+    "import-photos": "node scripts/import-photos.mjs"
   },
   "engines": {
     "node": ">=22.5"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }
