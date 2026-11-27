@@ -79,6 +79,7 @@ const SKILL_FIELDS: Field[] = [
 
 export default function Admin() {
   const [me, setMe] = useState<{ username: string } | null | undefined>(undefined);
+  const [navOpen, setNavOpen] = useState(false);
   useTheme();
   useEffect(() => {
     document.title = '관리자 | 임종탁 포트폴리오';
@@ -97,9 +98,16 @@ export default function Admin() {
   return (
     <div className="adm">
       <aside className="adm-side">
-        <Link to="/" className="logo"><span className="logo-mark"><i /><i /></span>Admin</Link>
-        <nav>{tabs.map(([to, label]) => <NavLink key={to} to={`/admin/${to}`} end>{label}</NavLink>)}</nav>
-        <div className="adm-me">{me.username}<button className="btn btn-ghost btn-sm" onClick={logout}>로그아웃</button></div>
+        <div className="adm-side-top">
+          <button className="adm-hamburger" aria-label="메뉴" onClick={() => setNavOpen(o => !o)}>
+            <span /><span /><span />
+          </button>
+          <Link to="/" className="logo"><span className="logo-mark"><i /><i /></span>Admin</Link>
+        </div>
+        <div className={`adm-side-nav${navOpen ? ' open' : ''}`}>
+          <nav onClick={() => setNavOpen(false)}>{tabs.map(([to, label]) => <NavLink key={to} to={`/admin/${to}`} end>{label}</NavLink>)}</nav>
+          <div className="adm-me">{me.username}<button className="btn btn-ghost btn-sm" onClick={logout}>로그아웃</button></div>
+        </div>
       </aside>
       <main className="adm-main">
         <Routes>
