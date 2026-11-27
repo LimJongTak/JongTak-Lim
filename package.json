@@ -21,9 +21,7 @@
     "node": ">=22.5"
   },
   "devDependencies": {
-    "sharp": "^0.34.5"
-  },
-  "dependencies": {
+    "sharp": "^0.34.5",
     "pdf-parse": "^2.4.5"
   }
 }
